@@ -1,0 +1,219 @@
+name: Publish Jupyter Notebook to GitHub Pages
+
+on:
+  workflow_dispatch:
+    inputs:
+      notebook_name:
+        description: 'Notebook filename (without .ipynb extension)'
+        required: true
+        type: string
+        default: 'dipy_analysis_example'
+      include_outputs:
+        description: 'Include notebook outputs in HTML'
+        required: false
+        type: boolean
+        default: true
+      custom_title:
+        description: 'Custom title for the HTML page'
+        required: false
+        type: string
+        default: 'DIPY Analysis Results'
+  # push:
+  #   branches: [ main ]
+  #   paths:
+  #     - '*.ipynb'
+  # pull_request:
+  #   branches: [ main ]
+  #   paths:
+  #     - '*.ipynb'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install jupyter nbconvert dipy matplotlib nibabel numpy scipy plotly
+        pip install jinja2 beautifulsoup4
+
+    - name: Execute notebook (if triggered manually)
+      if: github.event_name == 'workflow_dispatch'
+      run: |
+        # Execute the notebook to generate outputs
+        jupyter nbconvert --to notebook --execute \
+          "${{ github.event.inputs.notebook_name }}.ipynb" \
+          --output "${{ github.event.inputs.notebook_name }}_executed.ipynb"
+
+    - name: Convert notebook to HTML
+      run: |
+        # Determine which notebook to convert
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          NOTEBOOK="${{ github.event.inputs.notebook_name }}_executed.ipynb"
+          TITLE="${{ github.event.inputs.custom_title }}"
+          INCLUDE_OUTPUTS="${{ github.event.inputs.include_outputs }}"
+        else
+          # Find the most recently modified notebook
+          NOTEBOOK=$(ls -t *.ipynb | head -n1)
+          TITLE="DIPY Analysis Results"
+          INCLUDE_OUTPUTS="true"
+        fi
+
+        echo "Converting notebook: $NOTEBOOK"
+        echo "Title: $TITLE"
+
+        # Create output directory
+        mkdir -p docs
+
+        # Convert notebook to HTML
+        if [ "$INCLUDE_OUTPUTS" == "true" ]; then
+          jupyter nbconvert --to html "$NOTEBOOK" \
+            --output-dir docs \
+            --output index.html \
+            --template lab \
+            --no-input
+        else
+          jupyter nbconvert --to html "$NOTEBOOK" \
+            --output-dir docs \
+            --output index.html \
+            --template lab \
+            --no-input \
+            --ClearOutputPreprocessor.enabled=True
+        fi
+
+        # Create a custom CSS file for better styling
+        cat > docs/custom.css << 'EOF'
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+
+        .jp-Notebook {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 40px;
+            margin: 20px 0;
+        }
+
+        h1, h2, h3, h4, h5, h6 {
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 5px;
+        }
+
+        .jp-OutputArea-output {
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+        }
+
+        pre {
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+
+        .highlight {
+            background-color: #fff3cd;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+        EOF
+
+        # Inject custom CSS and title into HTML
+        python3 << 'PYTHON_SCRIPT'
+        from bs4 import BeautifulSoup
+        import os
+
+        # Read the generated HTML
+        with open('docs/index.html', 'r', encoding='utf-8') as f:
+            html_content = f.read()
+
+        soup = BeautifulSoup(html_content, 'html.parser')
+
+        # Update title
+        title_tag = soup.find('title')
+        if title_tag:
+            title_tag.string = os.environ.get('TITLE', 'DIPY Analysis Results')
+
+        # Add custom CSS
+        head = soup.find('head')
+        if head:
+            link_tag = soup.new_tag('link', rel='stylesheet', href='custom.css')
+            head.append(link_tag)
+
+            # Add meta tags
+            meta_viewport = soup.new_tag('meta', content='width=device-width, initial-scale=1.0')
+            meta_viewport['name'] = 'viewport'
+            head.append(meta_viewport)
+
+            meta_desc = soup.new_tag('meta', content='DIPY diffusion MRI analysis results and visualizations')
+            meta_desc['name'] = 'description'
+            head.append(meta_desc)
+
+        # Add header with timestamp and GitHub link
+        body = soup.find('body')
+        if body:
+            header = soup.new_tag('div', style='text-align: center; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; margin-bottom: 30px; border-radius: 8px;')
+            header.string = f'Generated on {os.environ.get("GITHUB_RUN_ID", "GitHub Actions")} | Repository: NeuroHackademy2025'
+            body.insert(0, header)
+
+        # Write back the modified HTML
+        with open('docs/index.html', 'w', encoding='utf-8') as f:
+            f.write(str(soup))
+        PYTHON_SCRIPT
+
+        # Copy any generated image files to docs directory
+        find . -maxdepth 1 -name "*.png" -exec cp {} docs/ \;
+        find . -maxdepth 1 -name "*.html" ! -name "index.html" -exec cp {} docs/ \;
+        find . -maxdepth 1 -name "*.json" -exec cp {} docs/ \;
+
+        echo "✅ Notebook converted to HTML successfully!"
+        echo "Files in docs directory:"
+        ls -la docs/
+
+    - name: Setup Pages
+      uses: actions/configure-pages@v5
+
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: './docs'
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4
+
+    - name: Output deployment URL
+      run: |
+        echo "🚀 Deployment completed!"
+        echo "📄 Your notebook is now available at: ${{ steps.deployment.outputs.page_url }}"
+        echo ""
+        echo "Generated files:"
+        ls -la docs/

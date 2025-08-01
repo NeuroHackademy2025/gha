@@ -1,0 +1,99 @@
+name: Open-neuro Dataset Processing
+
+on:
+  workflow_dispatch:
+    inputs:
+      dataset_id:
+        description: 'OpenNeuro Dataset ID (e.g., ds000030)'
+        required: true
+        type: string
+      subject_id:
+        description: 'Subject ID (e.g., sub-01)'
+        required: true
+        type: string
+      session_id:
+        description: 'Session ID (optional, e.g., ses-01)'
+        required: false
+        type: string
+      run_median_otsu:
+        description: 'Run median_otsu skull stripping'
+        required: true
+        type: boolean
+        default: true
+      run_dti:
+        description: 'Run DTI processing'
+        required: true
+        type: boolean
+        default: true
+      save_artifacts:
+        description: 'Save processing results as artifacts'
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  dipy-processing:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install dipy openneuro-py nibabel numpy requests
+
+    - name: Download OpenNeuro dataset
+      id: download
+      run: |
+        python download_openneuro.py \
+          --dataset-id "${{ github.event.inputs.dataset_id }}" \
+          --subject-id "${{ github.event.inputs.subject_id }}" \
+          ${{ github.event.inputs.session_id && format('--session-id {0}', github.event.inputs.session_id) || '' }}
+
+    - name: Create results directory
+      run: mkdir -p results
+
+    - name: Run median_otsu skull stripping
+      if: ${{ github.event.inputs.run_median_otsu == 'true' }}
+      run: |
+        dipy_median_otsu \
+          "${{ steps.download.outputs.dwi_file }}" \
+          --out_dir results \
+          --out_brain dwi_brain.nii.gz \
+          --out_mask brain_mask.nii.gz
+
+    - name: Run DTI processing
+      if: ${{ github.event.inputs.run_dti == 'true' }}
+      run: |
+        if [ "${{ github.event.inputs.run_median_otsu }}" == "true" ]; then
+          # Use brain mask if median_otsu was run
+          dipy_fit_dti \
+            "${{ steps.download.outputs.dwi_file }}" \
+            "${{ steps.download.outputs.bval_file }}" \
+            "${{ steps.download.outputs.bvec_file }}" \
+            --out_dir results \
+            --mask results/brain_mask.nii.gz
+        else
+          # Run without mask
+          dipy_fit_dti \
+            "${{ steps.download.outputs.dwi_file }}" \
+            "${{ steps.download.outputs.bval_file }}" \
+            "${{ steps.download.outputs.bvec_file }}" \
+            --out_dir results
+        fi
+
+    - name: Upload processing results
+      if: ${{ github.event.inputs.save_artifacts == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: dipy-processing-results
+        path: |
+          results/
+          dataset_info.json

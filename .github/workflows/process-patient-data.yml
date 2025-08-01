@@ -1,6 +1,9 @@
 name: Process Patient Data
 
 on:
+  # schedule:
+  #   - cron: '0 0 * * *'  # Runs daily at midnight
+  # To run manually
   workflow_dispatch:
     inputs:
       patient_name:
@@ -50,7 +53,7 @@ jobs:
 
     - name: Upload processing results
       if: ${{ github.event.inputs.save_artifact == 'true' }}
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: patient-data-config
         path: patient_config.json
