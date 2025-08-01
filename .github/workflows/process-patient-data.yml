@@ -1,0 +1,56 @@
+name: Process Patient Data
+
+on:
+  workflow_dispatch:
+    inputs:
+      patient_name:
+        description: 'Patient Name'
+        required: true
+        type: string
+      session_name:
+        description: 'Session Name'
+        required: true
+        type: string
+      remove_skull:
+        description: 'Remove Skull'
+        required: true
+        type: boolean
+        default: false
+      denoise:
+        description: 'Apply Denoising'
+        required: true
+        type: boolean
+        default: false
+      save_artifact:
+        description: 'Save configuration as artifact'
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  process-data:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Run patient data processor
+      run: |
+        python process_patient_data.py \
+          --patient-name "${{ github.event.inputs.patient_name }}" \
+          --session-name "${{ github.event.inputs.session_name }}" \
+          --remove-skull "${{ github.event.inputs.remove_skull }}" \
+          --denoise "${{ github.event.inputs.denoise }}"
+
+    - name: Upload processing results
+      if: ${{ github.event.inputs.save_artifact == 'true' }}
+      uses: actions/upload-artifact@v3
+      with:
+        name: patient-data-config
+        path: patient_config.json

@@ -1,0 +1,20 @@
+name: Python Environment
+
+on:
+  # To run manually
+  workflow_dispatch
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/setup-python@v5
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install numpy scipy dipy
+
+    - name: Hello World
+      run: |
+        python -c "import numpy as np; print('Numpy version: '+np.__version__)"
+        python -c "import dipy; print('DIPY version: '+dipy.__version__)"
