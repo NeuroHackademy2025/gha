@@ -1,4 +1,4 @@
-name: Conda Environment
+name: Intro Conda Environment
 
 on:
   # To run manually
@@ -8,20 +8,24 @@ jobs:
   setup:
     runs-on: ubuntu-latest
     steps:
-      - uses: conda-incubator/setup-miniconda@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Miniconda
+        uses: conda-incubator/setup-miniconda@v3
         with:
           miniconda-version: "latest"
-          channels: conda-forge. # , defaults
+          channels: conda-forge,defaults
           activate-environment: scipy
-          python-version: 3.12
+          python-version: "3.12"
 
       - name: Install conda packages
-        shell: pwsh
+        shell: bash -el {0}
         run: |
           conda install numpy scipy dipy
 
-      - name: Hello World
-        shell: pwsh
+      - name: Test package imports
+        shell: bash -el {0}
         run: |
           python -c "import numpy as np; print('Numpy version: '+np.__version__)"
           python -c "import scipy as sp; print('Scipy version: '+sp.__version__)"

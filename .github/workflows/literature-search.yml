@@ -1,0 +1,62 @@
+name: Literature Review Alert System
+
+on:
+  # Run daily at 9 AM UTC (adjust timezone as needed)
+  schedule:
+    - cron: '0 9 * * *'
+  # Allow manual triggering for testing
+  workflow_dispatch:
+    inputs:
+      days_back:
+        description: 'Number of days to look back for papers'
+        required: false
+        default: '1'
+
+jobs:
+  literature-review:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        pip install requests beautifulsoup4 python-dateutil feedgen
+
+    - name: Run literature search
+      env:
+        RESEARCH_KEYWORDS: ${{ vars.RESEARCH_KEYWORDS }}
+        DAYS_BACK: ${{ github.event.inputs.days_back || '1' }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        REPO_NAME: ${{ github.repository }}
+      run: python scripts/literature_search.py
+
+    - name: Setup GitHub Pages
+      if: github.ref == 'refs/heads/main'
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+
+        # Create or switch to gh-pages branch
+        git fetch origin gh-pages || git checkout --orphan gh-pages
+        git checkout gh-pages || git checkout -b gh-pages
+
+        # Copy generated files
+        cp -r docs/* . 2>/dev/null || echo "No docs directory yet"
+
+        # Add and commit changes
+        git add .
+        git diff --staged --quiet || git commit -m "Update literature review $(date '+%Y-%m-%d %H:%M')"
+
+        # Push to gh-pages
+        git push origin gh-pages
+
+    - name: Switch back to main branch
+      if: always()
+      run: git checkout main
