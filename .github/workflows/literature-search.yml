@@ -1,9 +1,9 @@
 name: Literature Review Alert System
 
 on:
-  # Run daily at 9 AM UTC (adjust timezone as needed)
-  schedule:
-    - cron: '0 9 * * *'
+  # # Run daily at 9 AM UTC (adjust timezone as needed)
+  # schedule:
+  #   - cron: '0 9 * * *'
   # Allow manual triggering for testing
   workflow_dispatch:
     inputs:

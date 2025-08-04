@@ -1,9 +1,9 @@
 name: Grant Deadline Tracker
 
 on:
-  # Run daily at 10 AM UTC
-  schedule:
-    - cron: '0 10 * * *'
+  # # Run daily at 10 AM UTC
+  # schedule:
+  #   - cron: '0 10 * * *'
   # Allow manual triggering
   workflow_dispatch:
     inputs:
